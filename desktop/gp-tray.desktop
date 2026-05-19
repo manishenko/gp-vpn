@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=GP VPN Tray
+Exec=__HOME__/.local/bin/gp-tray
+Icon=network-vpn
+Comment=GlobalProtect VPN status indicator
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+
+export PATH="$HOME/.local/bin:$PATH"
+
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/gp-vpn/config"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "gp-connect: config not found: $CONFIG_FILE" >&2
+    echo "  Run install.sh to configure, or create it manually:" >&2
+    echo "  mkdir -p \"\$(dirname \"$CONFIG_FILE\")\" && echo 'GP_GATEWAY=\"your.vpn.gateway.com\"' > \"$CONFIG_FILE\"" >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$CONFIG_FILE"
+
+if [[ -z "${GP_GATEWAY:-}" ]]; then
+    echo "gp-connect: GP_GATEWAY not set in $CONFIG_FILE" >&2
+    exit 1
+fi
+
+PID_FILE=/tmp/gp-vpn.pid
+VERBOSE=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -v|--verbose) VERBOSE=1; shift ;;
+        *) echo "gp-connect: unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+if [[ -f "$PID_FILE" ]]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [[ -n "$PID" ]] && [[ -d "/proc/$PID" ]]; then
+        echo "gp-vpn: already connected (pid $PID)"
+        exit 0
+    fi
+    echo "gp-vpn: stale pid file found, cleaning up..."
+    sudo /usr/local/sbin/gp-vpn-disconnect 2>/dev/null || true
+fi
+
+if [[ $VERBOSE -eq 0 ]]; then
+    eval "$(gp-saml-gui --gateway "$GP_GATEWAY" 2>/dev/null | grep -E '^(HOST|USER|COOKIE|OS)=' | sed 's/^/VPN_/')"
+else
+    eval "$(gp-saml-gui --gateway "$GP_GATEWAY" | grep -E '^(HOST|USER|COOKIE|OS)=' | sed 's/^/VPN_/')"
+fi
+
+if [[ -z "${VPN_COOKIE:-}" ]]; then
+    echo "gp-vpn: failed to get SAML credentials (window closed?)" >&2
+    exit 1
+fi
+
+VPN_USERGROUP="${VPN_HOST##*/}"
+VPN_SERVER="${VPN_HOST%/$VPN_USERGROUP}"
+VPN_SERVER="${VPN_SERVER#https://}"
+
+echo "$VPN_COOKIE" | sudo /usr/local/sbin/gp-vpn-connect \
+    "$VPN_USER" "$VPN_OS" "$VPN_USERGROUP" "$VPN_SERVER" "$PID_FILE"
+
+for i in $(seq 1 10); do
+    [[ -f "$PID_FILE" ]] && break
+    sleep 0.2
+done
+
+if [[ -f "$PID_FILE" ]]; then
+    echo "gp-vpn: connected (pid $(cat "$PID_FILE"))"
+else
+    echo "gp-vpn: connected (check gp-status)"
+fi

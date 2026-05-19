@@ -1,0 +1,13 @@
+#!/bin/bash
+PID_FILE=/tmp/gp-vpn.pid
+if [[ ! -f "$PID_FILE" ]]; then exit 0; fi
+PID=$(cat "$PID_FILE" 2>/dev/null || true)
+if [[ -n "$PID" ]] && [[ -d "/proc/$PID" ]]; then
+    kill "$PID" 2>/dev/null || true
+    for i in $(seq 1 10); do
+        [[ ! -d "/proc/$PID" ]] && break
+        sleep 0.5
+    done
+    if [[ -d "/proc/$PID" ]]; then kill -9 "$PID" 2>/dev/null || true; fi
+fi
+rm -f "$PID_FILE"

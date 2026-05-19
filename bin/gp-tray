@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+import os
+import sys
+import fcntl
+import gi
+import subprocess
+from datetime import datetime
+from typing import Optional
+
+gi.require_version('AppIndicator3', '0.1')
+gi.require_version('Gtk', '3.0')
+from gi.repository import AppIndicator3, Gtk, GLib
+
+ICON_CONNECTED    = os.path.expanduser('~/.local/share/icons/gp-vpn-connected.svg')
+ICON_DISCONNECTED = os.path.expanduser('~/.local/share/icons/gp-vpn-disconnected.svg')
+POLL_INTERVAL_MS  = 5000
+LOCK_FILE         = '/tmp/gp-tray.lock'
+
+_lock_fd = None
+connected_since: Optional[datetime] = None
+status_item: Optional[Gtk.MenuItem] = None
+connect_item: Optional[Gtk.MenuItem] = None
+disconnect_item: Optional[Gtk.MenuItem] = None
+indicator: Optional[AppIndicator3.Indicator] = None
+
+
+def ensure_single_instance() -> None:
+    global _lock_fd
+    _lock_fd = open(LOCK_FILE, 'w')
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_fd.write(str(os.getpid()))
+        _lock_fd.flush()
+    except IOError:
+        print('gp-tray is already running', file=sys.stderr)
+        sys.exit(1)
+
+
+def build_menu() -> Gtk.Menu:
+    global status_item, connect_item, disconnect_item
+
+    menu = Gtk.Menu()
+
+    status_item = Gtk.MenuItem(label='Checking...')
+    status_item.set_sensitive(False)
+    menu.append(status_item)
+
+    menu.append(Gtk.SeparatorMenuItem())
+
+    connect_item = Gtk.MenuItem(label='Connect')
+    connect_item.connect('activate', on_connect)
+    menu.append(connect_item)
+
+    disconnect_item = Gtk.MenuItem(label='Disconnect')
+    disconnect_item.connect('activate', on_disconnect)
+    menu.append(disconnect_item)
+
+    menu.append(Gtk.SeparatorMenuItem())
+
+    quit_item = Gtk.MenuItem(label='Quit')
+    quit_item.connect('activate', on_quit)
+    menu.append(quit_item)
+
+    menu.show_all()
+    return menu
+
+
+def update_ui(connected: bool, _status_text: str) -> None:
+    global connected_since
+
+    if connected and connected_since is None:
+        connected_since = datetime.now()
+    elif not connected:
+        connected_since = None
+
+    if connected:
+        indicator.set_icon_full(ICON_CONNECTED, 'VPN Connected')
+        since = connected_since.strftime('%H:%M') if connected_since else ''
+        status_item.set_label(f'● Connected since {since}')
+    else:
+        indicator.set_icon_full(ICON_DISCONNECTED, 'VPN Disconnected')
+        status_item.set_label('○ Disconnected')
+
+    connect_item.set_sensitive(not connected)
+    disconnect_item.set_sensitive(connected)
+
+
+def poll_status() -> bool:
+    result = subprocess.run(['gp-status'], capture_output=True, text=True)
+    update_ui(result.returncode == 0, result.stdout.strip())
+    return True
+
+
+def on_connect(item: Gtk.MenuItem) -> None:
+    subprocess.Popen(['gp-connect'])
+
+
+def on_disconnect(item: Gtk.MenuItem) -> None:
+    subprocess.run(['gp-disconnect'])
+    poll_status()
+
+
+def on_quit(item: Gtk.MenuItem) -> None:
+    Gtk.main_quit()
+
+
+def main() -> None:
+    global indicator
+
+    ensure_single_instance()
+
+    indicator = AppIndicator3.Indicator.new(
+        'gp-vpn',
+        ICON_DISCONNECTED,
+        AppIndicator3.IndicatorCategory.SYSTEM_SERVICES,
+    )
+    indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+    indicator.set_menu(build_menu())
+
+    poll_status()
+    GLib.timeout_add(POLL_INTERVAL_MS, poll_status)
+
+    Gtk.main()
+
+
+if __name__ == '__main__':
+    main()

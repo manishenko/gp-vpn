@@ -1,0 +1,3 @@
+# GP VPN configuration
+# Copy to ~/.config/gp-vpn/config and set your gateway
+GP_GATEWAY="vpn.your-company.com"

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+PID_FILE=/tmp/gp-vpn.pid
+
+if [[ ! -f "$PID_FILE" ]]; then
+    echo "disconnected"
+    exit 1
+fi
+
+PID=$(cat "$PID_FILE" 2>/dev/null || true)
+
+if [[ -z "$PID" ]] || [[ ! -d "/proc/$PID" ]]; then
+    echo "disconnected (stale pid file)"
+    exit 1
+fi
+
+if ip -br addr show tun0 2>/dev/null | grep -q UP; then
+    IP=$(ip -br addr show tun0 2>/dev/null | awk '{print $3}')
+    echo "connected (pid $PID, $IP)"
+else
+    echo "connecting... (pid $PID, waiting for tun0)"
+fi
+exit 0

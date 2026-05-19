@@ -1,0 +1,8 @@
+#!/bin/bash
+# stdin: prelogin-cookie; $1=user $2=os $3=usergroup $4=server $5=pidfile
+exec openconnect \
+    --protocol=gp '--useragent=PAN GlobalProtect' \
+    "--user=$1" "--os=$2" "--usergroup=$3" \
+    --passwd-on-stdin --syslog --background \
+    "--pid-file=$5" "$4" \
+    >/dev/null 2>/dev/null

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+PID_FILE=/tmp/gp-vpn.pid
+
+if [[ ! -f "$PID_FILE" ]]; then
+    echo "gp-vpn: not connected"
+    exit 1
+fi
+
+PID=$(cat "$PID_FILE" 2>/dev/null || true)
+
+if [[ -z "$PID" ]] || [[ ! -d "/proc/$PID" ]]; then
+    echo "gp-vpn: not connected (cleaning up stale pid file...)"
+    sudo /usr/local/sbin/gp-vpn-disconnect
+    exit 1
+fi
+
+echo "gp-vpn: disconnecting (pid $PID)..."
+sudo /usr/local/sbin/gp-vpn-disconnect
+echo "gp-vpn: disconnected"
