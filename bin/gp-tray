@@ -7,9 +7,14 @@ import subprocess
 from datetime import datetime
 from typing import Optional
 
-gi.require_version('AppIndicator3', '0.1')
 gi.require_version('Gtk', '3.0')
-from gi.repository import AppIndicator3, Gtk, GLib
+try:
+    gi.require_version('AyatanaAppIndicator3', '0.1')
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator3
+except (ValueError, ImportError):
+    gi.require_version('AppIndicator3', '0.1')
+    from gi.repository import AppIndicator3
+from gi.repository import Gtk, GLib
 
 ICON_CONNECTED    = os.path.expanduser('~/.local/share/icons/gp-vpn-connected.svg')
 ICON_DISCONNECTED = os.path.expanduser('~/.local/share/icons/gp-vpn-disconnected.svg')
